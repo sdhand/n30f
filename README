@@ -1,0 +1,3 @@
+n30f is a quick hack to display a png in a borderless and transparent non-wm-managed window
+build using make and install to $PREFIX (/usr by default) with sudo make install
+n30f -h for usage

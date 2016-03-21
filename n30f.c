@@ -31,11 +31,12 @@ struct xcb_display_info
 // name: the name the program was called using
 void usage (char *name)
 {
-	printf("usage: %s [-x xposition] [-y yposition] [-h, --help] [-d, --dock] [-c, --command] FILE\n", name);
+	printf("usage: %s [-x xposition] [-y yposition] [-h, --help] [-d, --dock] [-b, --bottom] [-c, --command] FILE\n", name);
 	printf("    -h, --help      print this message\n");
 	printf("    -x              set the x position\n");
 	printf("    -y              set the y position\n");
 	printf("    -d, --dock      force docking for non ewmh WMs\n");
+	printf("    -b, --bottom    put n30f at the bottom of the screen\n");
 	printf("    -c, --command   set the command to run on click\n");
 }
 
@@ -175,6 +176,7 @@ int main (int argc, char **argv)
 	int x = 0;
 	int y = 0;
 	int dock = 0;
+	int bottom = 0;
 	char *filename;
 
 	int help_flag = 0;
@@ -188,13 +190,14 @@ int main (int argc, char **argv)
 	{
 		{"help", no_argument, &help_flag, 1},
 		{"dock", no_argument, &dock, 1},
+		{"bottom", no_argument, &bottom, 1},
 		{"command", required_argument, 0, 'c'},
 		{0, 0, 0, 0}
 	};
 	char *command;
 	// parse options using getopt_long
 	while(option != -1){
-		option = getopt_long(argc, argv, "hdc:x:y:", long_options, &option_index);
+		option = getopt_long(argc, argv, "hdbc:x:y:", long_options, &option_index);
 		switch(option){
 			case 'h':
 				option = -1;
@@ -203,6 +206,10 @@ int main (int argc, char **argv)
 
 			case 'd':
 				dock = 1;
+				break;
+
+			case 'b':
+				bottom = 1;
 				break;
 
 			case 'c':
@@ -253,6 +260,9 @@ int main (int argc, char **argv)
 
 	// connect to the xserver
 	struct xcb_display_info display_info = init();
+
+	if(bottom)
+		y = display_info.s->height_in_pixels - cairo_image_surface_get_height(image) - y;
 
 	// create the window
 	xcb_window_t window = create_window(display_info, x, y, 

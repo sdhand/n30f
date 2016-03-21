@@ -175,7 +175,6 @@ int main (int argc, char **argv)
 {
 	int x = 0;
 	int y = 0;
-	int sh = 0;
 	int dock = 0;
 	int bottom = 0;
 	char *filename;

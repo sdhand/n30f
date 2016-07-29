@@ -36,8 +36,9 @@ void usage (char *name)
 	puts("    -h, --help       print this message");
 	puts("    -x               set the x position");
 	puts("    -y               set the y position");
-	puts("    -d, --dock       force docking for non ewmh WMs");
-	puts("    -b, --background run in the background instead of staying attached to the terminal");
+	puts("    -i, --ignored    force the window to be ignored for non EWMH WMs");
+	puts("    -d, --daemonise  run n30f daemonised");
+	puts("    -b, --bottom     put n30f at the bottom of the screen");
 	puts("    -c, --command    set the command to run on click");
 	puts("    -t, --title      set the window title");
 	puts("    -u, --unmapped   start with the window unmapped (hidden)");
@@ -185,6 +186,7 @@ int main (int argc, char **argv)
 	int dock = 0;
 	int background = 0;
 	int unmapped = 0;
+	int bottom = 0;
 	char *filename;
 	char *title="n30f";
 
@@ -199,8 +201,9 @@ int main (int argc, char **argv)
 	struct option long_options [] =
 	{
 		{"help", no_argument, &help_flag, 1},
-		{"dock", no_argument, &dock, 1},
-		{"background", no_argument, &background, 1},
+		{"ignored", no_argument, &dock, 1},
+		{"daemonise", no_argument, &background, 1},
+		{"bottom", no_argument, &bottom, 1},
 		{"command", required_argument, 0, 'c'},
 		{"title", required_argument, 0, 't'},
 		{"unmapped", no_argument, &unmapped, 1},
@@ -210,18 +213,18 @@ int main (int argc, char **argv)
 	char *command = NULL;
 	// parse options using getopt_long
 	while(option != -1){
-		option = getopt_long(argc, argv, "hbdupt:c:x:y:", long_options, &option_index);
+		option = getopt_long(argc, argv, "hbidupt:c:x:y:", long_options, &option_index);
 		switch(option){
 			case 'h':
 				option = -1;
 				help_flag = 1;
 				break;
 
-			case 'b':
+			case 'd':
 				background = 1;
 				break;
 
-			case 'd':
+			case 'i':
 				dock = 1;
 				break;
 
@@ -231,6 +234,9 @@ int main (int argc, char **argv)
 
 			case 'p':
 				print_flag=1;
+
+			case 'b':
+				bottom = 1;
 				break;
 
 			case 'c':
@@ -286,6 +292,9 @@ int main (int argc, char **argv)
 
 	// connect to the xserver
 	struct xcb_display_info display_info = init();
+
+	if(bottom)
+		y = display_info.s->height_in_pixels - cairo_image_surface_get_height(image) - y;
 
 	// create the window
 	xcb_window_t window = create_window(display_info, x, y,

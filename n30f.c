@@ -10,6 +10,7 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -31,12 +32,16 @@ struct xcb_display_info
 // name: the name the program was called using
 void usage (char *name)
 {
-	printf("usage: %s [-x xposition] [-y yposition] [-h, --help] [-d, --dock] [-c, --command] FILE\n", name);
-	printf("    -h, --help      print this message\n");
-	printf("    -x              set the x position\n");
-	printf("    -y              set the y position\n");
-	printf("    -d, --dock      force docking for non ewmh WMs\n");
-	printf("    -c, --command   set the command to run on click\n");
+	printf("usage: %s [-x xposition] [-y yposition] [-h, --help] [-d, --dock] [-c, --command] [-t, --title] [-u, --unmapped] [-p, --print] FILE\n", name);
+	puts("    -h, --help       print this message");
+	puts("    -x               set the x position");
+	puts("    -y               set the y position");
+	puts("    -d, --dock       force docking for non ewmh WMs");
+	puts("    -b, --background run in the background instead of staying attached to the terminal");
+	puts("    -c, --command    set the command to run on click");
+	puts("    -t, --title      set the window title");
+	puts("    -u, --unmapped   start with the window unmapped (hidden)");
+	puts("    -p, --print      print the window id to stdout after starting");
 }
 
 // find a visualtype that supports true transparency
@@ -77,12 +82,12 @@ struct xcb_display_info init (void){
 }
 
 // create a window
-xcb_window_t create_window(struct xcb_display_info display_info, int x, int y, 
+xcb_window_t create_window(struct xcb_display_info display_info, int x, int y,
 		int width, int height, int dock)
 {
 	// generate a colourmap for the window with alpha support
 	xcb_window_t colormap = xcb_generate_id(display_info.c);
-	xcb_create_colormap(display_info.c, XCB_COLORMAP_ALLOC_NONE, colormap, 
+	xcb_create_colormap(display_info.c, XCB_COLORMAP_ALLOC_NONE, colormap,
 			display_info.s->root, display_info.v->visual_id);
 
 	// create the window
@@ -91,7 +96,7 @@ xcb_window_t create_window(struct xcb_display_info display_info, int x, int y,
 	xcb_create_window(display_info.c, 32, window, display_info.s->root,
 		x, y, width, height, 0,
 		XCB_WINDOW_CLASS_INPUT_OUTPUT, display_info.v->visual_id,
-		XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL | XCB_CW_OVERRIDE_REDIRECT | 
+		XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL | XCB_CW_OVERRIDE_REDIRECT |
 			XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
 		vals);
 
@@ -110,7 +115,7 @@ enum {
 };
 
 // configure the window then show it
-void show_window (xcb_connection_t *c, xcb_window_t window, int x, int y)
+void show_window (xcb_connection_t *c, xcb_window_t window, int x, int y, char *title, int should_map)
 {
 	// atom names that we want to find the atom for
 	const char *atom_names[] = {
@@ -141,18 +146,21 @@ void show_window (xcb_connection_t *c, xcb_window_t window, int x, int y)
 
 	// set the atoms
 	const uint32_t desktops[] = {-1};
-	const char *title = "n30f";
-	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, atom_list[NET_WM_WINDOW_TYPE], 
+	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, atom_list[NET_WM_WINDOW_TYPE],
 			XCB_ATOM_ATOM, 32, 1, &atom_list[NET_WM_WINDOW_TYPE_DOCK]);
-	xcb_change_property(c, XCB_PROP_MODE_APPEND, window, atom_list[NET_WM_STATE], 
+	xcb_change_property(c, XCB_PROP_MODE_APPEND, window, atom_list[NET_WM_STATE],
 			XCB_ATOM_ATOM, 32, 2, &atom_list[NET_WM_STATE_ABOVE]);
-	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, atom_list[NET_WM_DESKTOP], 
+	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, atom_list[NET_WM_DESKTOP],
 			XCB_ATOM_CARDINAL, 32, 1, desktops);
-	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME, 
+	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME,
 			XCB_ATOM_STRING, 8, strlen(title), title);
 
+	const uint32_t val[] = { 1 };
+	xcb_change_window_attributes(c, window, XCB_CW_OVERRIDE_REDIRECT, val);
+
 	// show the window
-	xcb_map_window(c, window);
+	if(should_map)
+		xcb_map_window(c, window);
 
 	// some WMs auto-position windows after they are mapped
     // this makes sure it gets to the right place
@@ -165,7 +173,7 @@ void show_window (xcb_connection_t *c, xcb_window_t window, int x, int y)
 void draw (cairo_t *cr, cairo_surface_t *image)
 {
 	cairo_set_source_surface(cr, image, 0, 0);
-	cairo_rectangle(cr, 0, 0, 
+	cairo_rectangle(cr, 0, 0,
 			cairo_image_surface_get_width(image), cairo_image_surface_get_height(image));
 	cairo_fill (cr);
 }
@@ -175,10 +183,14 @@ int main (int argc, char **argv)
 	int x = 0;
 	int y = 0;
 	int dock = 0;
+	int background = 0;
+	int unmapped = 0;
 	char *filename;
+	char *title="n30f";
 
 	int help_flag = 0;
 	int error_flag = 0;
+	int print_flag = 0;
 
 	int option = 0;
 	int option_index = 0;
@@ -188,25 +200,42 @@ int main (int argc, char **argv)
 	{
 		{"help", no_argument, &help_flag, 1},
 		{"dock", no_argument, &dock, 1},
+		{"background", no_argument, &background, 1},
 		{"command", required_argument, 0, 'c'},
+		{"title", required_argument, 0, 't'},
+		{"unmapped", no_argument, &unmapped, 1},
+		{"print", no_argument, &print_flag, 1},
 		{0, 0, 0, 0}
 	};
-	char *command;
+	char *command = NULL;
 	// parse options using getopt_long
 	while(option != -1){
-		option = getopt_long(argc, argv, "hdc:x:y:", long_options, &option_index);
+		option = getopt_long(argc, argv, "hbdupt:c:x:y:", long_options, &option_index);
 		switch(option){
 			case 'h':
 				option = -1;
 				help_flag = 1;
 				break;
 
+			case 'b':
+				background = 1;
+				break;
+
 			case 'd':
 				dock = 1;
 				break;
 
+			case 'u':
+				unmapped = 1;
+				break;
+
+			case 'p':
+				print_flag=1;
+				break;
+
 			case 'c':
-				command = strdup(optarg);
+				command = malloc(strlen(optarg)+3);
+				strcpy(command, optarg);
 				strcat(command, " &");
 				break;
 
@@ -216,6 +245,10 @@ int main (int argc, char **argv)
 
 			case 'y':
 				y = atoi(optarg);
+				break;
+
+			case 't':
+				title = strdup(optarg);
 				break;
 
 			case '?':
@@ -255,17 +288,26 @@ int main (int argc, char **argv)
 	struct xcb_display_info display_info = init();
 
 	// create the window
-	xcb_window_t window = create_window(display_info, x, y, 
+	xcb_window_t window = create_window(display_info, x, y,
 			cairo_image_surface_get_width(image), cairo_image_surface_get_height(image), dock);
 
 	// get a surface for the window and create a destination for it
-	cairo_surface_t *window_surface = cairo_xcb_surface_create(display_info.c, window, 
-			display_info.v, 
+	cairo_surface_t *window_surface = cairo_xcb_surface_create(display_info.c, window,
+			display_info.v,
 			cairo_image_surface_get_width(image), cairo_image_surface_get_height(image));
 	cairo_t *cr = cairo_create(window_surface);
 
 	// configure the window and then map it
-	show_window(display_info.c, window, x, y);
+	show_window(display_info.c, window, x, y, title, !unmapped);
+
+
+	if(print_flag){
+		printf("0x%08x\n", window);
+		fflush(stdout);
+	}
+
+	if(background)
+		daemon(1, 0);
 
 	//loop for events
 	xcb_generic_event_t *ev;

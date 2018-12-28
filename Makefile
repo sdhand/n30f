@@ -1,10 +1,13 @@
+CC       ?= gcc
 PREFIX   ?= /usr
 BINPREFIX = $(PREFIX)/bin
+
+LDLIBS   += -lcairo -lxcb -lxcb-render
 
 all: n30f
 
 n30f: n30f.c
-	gcc n30f.c -o n30f -lcairo -lxcb -lxcb-render
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 install: n30f
 	mkdir -p "$(DESTDIR)$(BINPREFIX)"

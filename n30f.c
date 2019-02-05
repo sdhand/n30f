@@ -34,6 +34,7 @@ void usage (char *name)
 {
 	printf("usage: %s [-x xposition] [-y yposition] [-h, --help] [-d, --dock] [-c, --command] [-t, --title] [-u, --unmapped] [-p, --print] FILE\n", name);
 	puts("    -h, --help       print this message");
+	puts("    -s               set the image scaling");
 	puts("    -x               set the x position");
 	puts("    -y               set the y position");
 	puts("    -i, --ignored    force the window to be ignored for non EWMH WMs");
@@ -183,6 +184,9 @@ int main (int argc, char **argv)
 {
 	int x = 0;
 	int y = 0;
+	double s = 1; /* scale at normal by default */
+	int image_height = 0;
+	int image_width = 0;
 	int dock = 0;
 	int background = 0;
 	int unmapped = 0;
@@ -213,7 +217,7 @@ int main (int argc, char **argv)
 	char *command = NULL;
 	// parse options using getopt_long
 	while(option != -1){
-		option = getopt_long(argc, argv, "hbidupt:c:x:y:", long_options, &option_index);
+		option = getopt_long(argc, argv, "hbidupt:c:x:y:s:", long_options, &option_index);
 		switch(option){
 			case 'h':
 				option = -1;
@@ -233,7 +237,8 @@ int main (int argc, char **argv)
 				break;
 
 			case 'p':
-				print_flag=1;
+				print_flag = 1;
+				break;
 
 			case 'b':
 				bottom = 1;
@@ -243,6 +248,10 @@ int main (int argc, char **argv)
 				command = malloc(strlen(optarg)+3);
 				strcpy(command, optarg);
 				strcat(command, " &");
+				break;
+
+			case 's':
+				s = atof(optarg);
 				break;
 
 			case 'x':
@@ -296,15 +305,19 @@ int main (int argc, char **argv)
 	if(bottom)
 		y = display_info.s->height_in_pixels - cairo_image_surface_get_height(image) - y;
 
+	// multiply by scaling factor
+	image_height = (int)(cairo_image_surface_get_height(image) * s);
+	image_width = (int)(cairo_image_surface_get_width(image) * s);
+
 	// create the window
-	xcb_window_t window = create_window(display_info, x, y,
-			cairo_image_surface_get_width(image), cairo_image_surface_get_height(image), dock);
+	xcb_window_t window = create_window(display_info, x, y, image_width, image_height, dock);
 
 	// get a surface for the window and create a destination for it
 	cairo_surface_t *window_surface = cairo_xcb_surface_create(display_info.c, window,
-			display_info.v,
-			cairo_image_surface_get_width(image), cairo_image_surface_get_height(image));
+			display_info.v, image_width, image_height);
+
 	cairo_t *cr = cairo_create(window_surface);
+	cairo_scale(cr, s, s);
 
 	// configure the window and then map it
 	show_window(display_info.c, window, x, y, title, !unmapped);

@@ -32,7 +32,7 @@ struct xcb_display_info
 // name: the name the program was called using
 void usage (char *name)
 {
-	printf("usage: %s [-x xposition] [-y yposition] [-h, --help] [-d, --dock] [-c, --command] [-t, --title] [-u, --unmapped] [-p, --print] FILE\n", name);
+	printf("usage: %s [-x xposition] [-y yposition] [-h, --help] [-d, --daemonise] [-b, --bottom] [-c, --command] [-t, --title] [-u, --unmapped] [-p, --print] FILE\n", name);
 	puts("    -h, --help       print this message");
 	puts("    -s               set the image scaling");
 	puts("    -x               set the x position");
@@ -111,9 +111,10 @@ xcb_window_t create_window(struct xcb_display_info display_info, int x, int y,
 enum {
     NET_WM_WINDOW_TYPE,
     NET_WM_WINDOW_TYPE_DOCK,
-    NET_WM_STATE,
-    NET_WM_STATE_ABOVE,
     NET_WM_DESKTOP,
+    NET_WM_STATE,
+    NET_WM_STATE_STICKY,
+    NET_WM_STATE_ABOVE,
 };
 
 // configure the window then show it
@@ -123,9 +124,10 @@ void show_window (xcb_connection_t *c, xcb_window_t window, int x, int y, char *
 	const char *atom_names[] = {
         "_NET_WM_WINDOW_TYPE",
         "_NET_WM_WINDOW_TYPE_DOCK",
-        "_NET_WM_STATE",
-        "_NET_WM_STATE_ABOVE",
         "_NET_WM_DESKTOP",
+        "_NET_WM_STATE",
+        "_NET_WM_STATE_STICKY",
+        "_NET_WM_STATE_ABOVE"
     };
 
 	// get all the atoms
@@ -151,14 +153,11 @@ void show_window (xcb_connection_t *c, xcb_window_t window, int x, int y, char *
 	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, atom_list[NET_WM_WINDOW_TYPE],
 			XCB_ATOM_ATOM, 32, 1, &atom_list[NET_WM_WINDOW_TYPE_DOCK]);
 	xcb_change_property(c, XCB_PROP_MODE_APPEND, window, atom_list[NET_WM_STATE],
-			XCB_ATOM_ATOM, 32, 2, &atom_list[NET_WM_STATE_ABOVE]);
-	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, atom_list[NET_WM_DESKTOP],
+			XCB_ATOM_ATOM, 32, 2, &atom_list[NET_WM_STATE_STICKY]);
+    xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, atom_list[NET_WM_DESKTOP],
 			XCB_ATOM_CARDINAL, 32, 1, desktops);
 	xcb_change_property(c, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME,
 			XCB_ATOM_STRING, 8, strlen(title), title);
-
-	const uint32_t val[] = { 1 };
-	xcb_change_window_attributes(c, window, XCB_CW_OVERRIDE_REDIRECT, val);
 
 	// show the window
 	if(should_map)
